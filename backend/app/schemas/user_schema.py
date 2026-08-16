@@ -13,7 +13,7 @@ class UserRegistrationSchema(Schema):
     name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
     email = fields.Email(required=True, validate=validate.Length(max=255))
     password = fields.Str(required=True, validate=validate.Length(min=6))
-    role = fields.Str(missing='student', validate=validate.OneOf(['student', 'admin']))
+    role = fields.Str(load_only=True, validate=validate.Equal('student'))
     
     @validates_schema
     def validate_email_unique(self, data, **kwargs):
