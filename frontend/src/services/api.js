@@ -33,6 +33,7 @@ export function buildSocialAuthUrl(provider, options = {}) {
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
+  withCredentials: true,
 });
 
 // ✅ Attach token automatically if it exists
@@ -99,6 +100,12 @@ export const authApi = {
 
   login: (email, password) =>
     api.post("/auth/login", { email, password }).then((r) => {
+      if (r.data.access_token) storeToken(r.data.access_token);
+      return r.data;
+    }),
+
+  exchangeOAuthCode: (code) =>
+    api.post("/auth/oauth/exchange", { code }).then((r) => {
       if (r.data.access_token) storeToken(r.data.access_token);
       return r.data;
     }),
