@@ -2,9 +2,10 @@ import base64
 import json
 import secrets
 import datetime
+import time
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from flask import Blueprint, request, jsonify, current_app, redirect, url_for
+from flask import Blueprint, request, jsonify, current_app, redirect, url_for, session
 from flask_cors import cross_origin
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
@@ -32,15 +33,18 @@ def register():
     name = data.get("name")
     email = data.get("email")
     password = data.get("password")
-    role = data.get("role", "student")  # default = student
+    requested_role = data.get("role")
 
     if not name or not email or not password:
         return jsonify({"error": "Name, email, and password are required"}), 400
 
+    if requested_role not in (None, "student"):
+        return jsonify({"error": "Role cannot be assigned during public registration"}), 400
+
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 400
 
-    user = User(name=name, email=email, role=role)
+    user = User(name=name, email=email, role="student")
     user.set_password(password)
 
     db.session.add(user)
@@ -120,13 +124,11 @@ def _decode_state(raw):
 
 def _safe_redirect_url(candidate):
     default_url = current_app.config.get("SOCIAL_DEFAULT_REDIRECT")
-    if not candidate:
-        return default_url
-
-    parsed = urlparse(candidate)
-    if parsed.scheme in {"http", "https"} and parsed.netloc:
+    allowed = current_app.config.get("OAUTH_REDIRECT_ALLOWLIST", set())
+    normalized = candidate.rstrip("/") if candidate else None
+    if normalized in allowed:
         return candidate
-    return default_url
+    return default_url if default_url and default_url.rstrip("/") in allowed else next(iter(allowed), None)
 
 
 def _append_query_params(url, params):
@@ -287,15 +289,45 @@ def oauth_callback(provider):
         )
         return redirect(error_redirect)
 
-    access_token = create_access_token(identity=str(user.id), expires_delta=datetime.timedelta(hours=1))
-
+    exchange_code = secrets.token_urlsafe(32)
+    session["oauth_exchange"] = {
+        "code": exchange_code,
+        "user_id": user.id,
+        "expires_at": int(time.time()) + 90,
+    }
     success_redirect = _append_query_params(
         redirect_url,
         {
-            "token": access_token,
+            "code": exchange_code,
             "provider": provider,
             "intent": intent,
             "state": frontend_state,
         },
     )
     return redirect(success_redirect)
+
+
+@auth_bp.route("/oauth/exchange", methods=["POST", "OPTIONS"])
+@cross_origin(supports_credentials=True)
+def oauth_exchange():
+    if request.method == "OPTIONS":
+        return _handle_preflight()
+
+    supplied_code = (request.get_json() or {}).get("code")
+    exchange = session.pop("oauth_exchange", None)
+    if (
+        not supplied_code
+        or not exchange
+        or exchange.get("expires_at", 0) < int(time.time())
+        or not secrets.compare_digest(supplied_code, exchange.get("code", ""))
+    ):
+        return jsonify({"error": "Invalid or expired OAuth exchange code"}), 401
+
+    user = db.session.get(User, exchange.get("user_id"))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    access_token = create_access_token(
+        identity=str(user.id), expires_delta=datetime.timedelta(hours=1)
+    )
+    return jsonify({"access_token": access_token, "user": user.to_dict()}), 200
