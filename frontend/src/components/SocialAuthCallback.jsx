@@ -16,8 +16,7 @@ export function SocialAuthCallback({ onComplete }) {
 
   useEffect(() => {
     const errorParam = params.get("error");
-    const token =
-      params.get("token") || params.get("access_token") || params.get("accessToken");
+    const code = params.get("code");
 
     if (errorParam) {
       setStatus("error");
@@ -25,18 +24,16 @@ export function SocialAuthCallback({ onComplete }) {
       return;
     }
 
-    if (!token) {
+    if (!code) {
       setStatus("error");
-      setMessage("Missing access token from the provider. Please try signing in again.");
+      setMessage("Missing sign-in exchange code. Please try signing in again.");
       return;
     }
 
-    localStorage.setItem("access_token", token);
-
     (async () => {
       try {
-        const me = await authApi.me();
-        const user = me.user ?? me;
+        const result = await authApi.exchangeOAuthCode(code);
+        const user = result.user;
         setStatus("success");
         setMessage(`You're in! Redirecting to your ${user.role} workspace.`);
 
