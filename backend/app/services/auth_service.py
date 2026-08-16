@@ -19,7 +19,7 @@ class AuthService:
         user = User(
             name=validated['name'],
             email=validated['email'],
-            role=validated.get('role', 'user')
+            role='student'
         )
         user.set_password(validated['password'])
         db.session.add(user)
