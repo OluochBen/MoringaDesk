@@ -35,7 +35,7 @@ def _auth_register_and_login(client, email="admin@moringa.test", password="secre
     # Register (ignore status; some backends may return 409 if already exists)
     client.post(
         "/auth/register",
-        json={"name": name, "email": email, "password": password, "role": "admin"},
+        json={"name": name, "email": email, "password": password},
     )
     # Login
     r = client.post("/auth/login", json={"email": email, "password": password})
