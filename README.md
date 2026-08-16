@@ -110,15 +110,18 @@ Copy `.env.example` to `.env` in both `backend/` and `frontend/`, then fill in v
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | Optional. Defaults to SQLite `instance/app.db` |
-| `SECRET_KEY` / `JWT_SECRET_KEY` | Flask session + JWT signing keys |
+| `SECRET_KEY` / `JWT_SECRET_KEY` | Flask session + JWT signing keys. Both are mandatory in production; use independent, high-entropy values. |
 | Social auth vars | `GOOGLE_...`, `GITHUB_...`, `FACEBOOK_...` enable OAuth sign-in |
-| `SOCIAL_DEFAULT_REDIRECT` | Backend fallback redirect (default `http://localhost:5173/auth/callback`) |
+| `SOCIAL_DEFAULT_REDIRECT` | Backend fallback redirect. It must also appear in `OAUTH_REDIRECT_ALLOWLIST`. |
+| `OAUTH_REDIRECT_ALLOWLIST` | Comma-separated, exact frontend OAuth callback URLs. Production deployments must list every trusted frontend callback explicitly. |
 | `VITE_API_BASE` | Frontend base URL for the API (default `http://localhost:5000`) |
 | `VITE_SOCIAL_AUTH_CALLBACK_URL` | Frontend callback URL (default `http://localhost:5173/auth/callback`) |
 
 ```bash
 cp .env.example .env
 ```
+
+OAuth provider callbacks issue a short-lived, single-use exchange code. The frontend exchanges that code for a JWT through `/auth/oauth/exchange`; JWTs are never placed in redirect query strings.
 
 ---
 
