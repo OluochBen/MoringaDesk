@@ -31,8 +31,24 @@ def create_app():
 
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
-    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "jwt-secret")
+    environment = os.getenv("FLASK_ENV", "development").lower()
+    is_production = environment == "production" or os.getenv("RENDER", "").lower() == "true"
+
+    secret_key = os.getenv("SECRET_KEY")
+    jwt_secret_key = os.getenv("JWT_SECRET_KEY")
+    if is_production and (not secret_key or not jwt_secret_key):
+        missing = [
+            name
+            for name, value in (("SECRET_KEY", secret_key), ("JWT_SECRET_KEY", jwt_secret_key))
+            if not value
+        ]
+        raise RuntimeError(f"Missing required production secrets: {', '.join(missing)}")
+
+    app.config["SECRET_KEY"] = secret_key or "dev-secret-key"
+    app.config["JWT_SECRET_KEY"] = jwt_secret_key or "jwt-secret"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SECURE"] = is_production
+    app.config["SESSION_COOKIE_SAMESITE"] = "None" if is_production else "Lax"
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -51,6 +67,17 @@ def create_app():
         "SOCIAL_DEFAULT_REDIRECT",
         os.getenv("SOCIAL_DEFAULT_REDIRECT", "http://localhost:5173/auth/callback"),
     )
+    configured_redirects = os.getenv("OAUTH_REDIRECT_ALLOWLIST", "")
+    app.config["OAUTH_REDIRECT_ALLOWLIST"] = {
+        url.strip().rstrip("/")
+        for url in configured_redirects.split(",")
+        if url.strip()
+    } or {
+        "http://localhost:5173/auth/callback",
+        "http://127.0.0.1:5173/auth/callback",
+        "https://moringadesk-gcvu.onrender.com/auth/callback",
+        "https://moringadesk-gteo.onrender.com/auth/callback",
+    }
     register_oauth_clients(app)
 
     # --- CORS ---
